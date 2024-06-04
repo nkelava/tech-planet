@@ -1,11 +1,11 @@
-﻿using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using RestSharp;
 using RestSharp.Authenticators;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using TechStore.Application.Models.Authorization;
@@ -26,10 +26,10 @@ namespace TechStore.API.Controllers
         //private readonly JwtSettings _jwtSettings;
         private readonly TechStoreContext _context;
         private readonly TokenValidationParameters _tokenValidationParameters;
-        public readonly IMapper _mapper;
+        private readonly ILogger<AuthenticationController> _logger;
 
         public AuthenticationController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, RoleManager<IdentityRole> roleManager, 
-            IConfiguration configuration, IMapper mapper, TechStoreContext techStoreContext, TokenValidationParameters tokenValidationParameters)
+            IConfiguration configuration, TechStoreContext techStoreContext, TokenValidationParameters tokenValidationParameters, ILogger<AuthenticationController> logger)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -38,7 +38,7 @@ namespace TechStore.API.Controllers
             _configuration = configuration;
             _context = techStoreContext;
             _tokenValidationParameters = tokenValidationParameters;
-            _mapper = mapper;
+            _logger = logger;
         }
 
         [AllowAnonymous]
@@ -50,7 +50,7 @@ namespace TechStore.API.Controllers
 
                 if (user is not null) {
                     if (!user.EmailConfirmed)
-                        return BadRequest("Please confirm your email address via link that is sent to you email address.");
+                        return StatusCode((int)HttpStatusCode.Forbidden, "Please confirm your email address via link that is sent to you email address.");
 
                     var result = await _signInManager.PasswordSignInAsync(user, loginModel.Password, false, false);
 
@@ -66,102 +66,71 @@ namespace TechStore.API.Controllers
         }
 
         [AllowAnonymous]
-        [HttpGet("register-admin")]
-        public async Task<IActionResult> RegisterAdmin()
-        {
-            try
-            {
-
-                var newUser = new ApplicationUser()
-                {
-                    Email = "admin2@gmail.com",
-                    UserName = "admin2@gmail.com",
-                    FirstName = "Admin",
-                    LastName = "Admin",
-                    EmailConfirmed = true
-                };
-
-                var user = await _userManager.FindByEmailAsync("admin2@gmail.com");
-
-                if (user is not null)
-                    return BadRequest("The email address is already in use.");
-
-                var isCreatedResponse = await _userManager.CreateAsync(newUser, "Admin_994");
-
-                if (isCreatedResponse.Succeeded)
-                {
-                    await _userManager.AddToRoleAsync(newUser, UserRoles.Admin);
-                }
-
-                return Ok(newUser);
-            } catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
-
-        [AllowAnonymous]
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterModel registerModel)
         {
-            if (ModelState.IsValid) {
-                var user = await _userManager.FindByEmailAsync(registerModel.Email);
+            if (!ModelState.IsValid)
+                return BadRequest("Invalid registration details.");
 
-                if (user is not null)
-                    return BadRequest("The email address is already in use.");
+            var existingUser = await _userManager.FindByEmailAsync(registerModel.Email);
 
-                var newUser = new ApplicationUser()
-                {
-                    Email = registerModel.Email,
-                    UserName = registerModel.Email,
-                    FirstName = registerModel.FirstName,
-                    LastName = registerModel.LastName,
-                    EmailConfirmed = false
-                };
+            if (existingUser != null)
+                return BadRequest("The email address is already in use.");
 
-                var isCreatedResponse = await _userManager.CreateAsync(newUser, registerModel.Password);
+            var newUser = new ApplicationUser()
+            {
+                FirstName = registerModel.FirstName,
+                LastName = registerModel.LastName,
+                Email = registerModel.Email,
+                UserName = registerModel.Email,
+                EmailConfirmed = false
+            };
 
-                if (isCreatedResponse.Succeeded) {
-                    await _userManager.AddToRoleAsync(newUser, UserRoles.User);
+            var creationResult = await _userManager.CreateAsync(newUser, registerModel.Password);
 
-                    var verificationToken = await _userManager.GenerateEmailConfirmationTokenAsync(newUser);
-                    var callbackUrl = Request.Scheme + "://" + Request.Host + Url.Action("ConfirmEmail", "Authentication", new { userId = newUser.Id, token = verificationToken });
+            if (!creationResult.Succeeded)
+                return StatusCode((int)HttpStatusCode.InternalServerError, "User creation failed. Please try again later.");
 
-                    var emailBody =
-                        $"<h1 style=\"margin-bottom: 10px;\">Email verification</h1>" +
-                        $"<p style=\"margin-bottom: 40px;\">Wowwee! We're excited to have you get started. Before we get started, we will need to confirm your account. You can do that by simply clickling on the button below.</p>" +
-                        $"<a href=\"{callbackUrl}\" style=\"background-color: #49656a; color: #ffffff; border: none; outline: none; border-radius: 5px; padding: 10px 20px; text-decoration: none;\"> Confirm Account </a>" +
-                        $"<p style=\"margin-top: 40px; margin-bottom: 20px;\">Or, if that doesn't work, copy and paste the following link in your browser:</p> " +
-                        $"<p style=\"margin-bottom: 20px;\">{callbackUrl}</p>" +
-                        $"<p>If you didn't create an account with TechPlanet, you can safely delete this email.<br/><br/>Cheers, <br/> TechPlanet</p>";
+            await _userManager.AddToRoleAsync(newUser, UserRoles.User);
 
-                    var result = SendEmail(emailBody, newUser.Email);
+            var verificationToken = await _userManager.GenerateEmailConfirmationTokenAsync(newUser);
+            var callbackUrl = Url.Action(
+                "ConfirmEmail",
+                "Authentication",
+                new { userId = newUser.Id, token = verificationToken },
+                protocol: Request.Scheme);
 
-                    if (result)
-                        return Ok("Please, verify your email. Confirmation link is sent to your email address.");
+            var emailBody =
+                $"<h1 style=\"margin-bottom: 10px;\">Email verification</h1>" +
+                $"<p style=\"margin-bottom: 40px;\">Wowwee! We're excited to have you get started. Before we get started, we will need to confirm your account. You can do that by simply clickling on the button below.</p>" +
+                $"<a href=\"{callbackUrl}\" style=\"background-color: #49656a; color: #ffffff; border: none; outline: none; border-radius: 5px; padding: 10px 20px; text-decoration: none;\"> Confirm Account </a>" +
+                $"<p style=\"margin-top: 40px; margin-bottom: 20px;\">Or, if that doesn't work, copy and paste the following link in your browser:</p> " +
+                $"<p style=\"margin-bottom: 20px;\">{callbackUrl}</p>" +
+                $"<p>If you didn't create an account with TechPlanet, you can safely delete this email.<br/><br/>Cheers, <br/> TechPlanet</p>";
 
-                    return Ok("Please, request an email verification link.");
-                }
-                return StatusCode(StatusCodes.Status500InternalServerError, "Register was unsuccessful. Please, try again later.");
-            }
-            return BadRequest(registerModel);
+            var emailSent = SendEmail(emailBody, newUser.Email);
+
+            if (emailSent)
+                return Ok("Please, verify your email. Confirmation link is sent to your email address.");
+
+            return StatusCode((int)HttpStatusCode.Forbidden, "Please, request an email verification link.");
         }
 
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail(string userId, string token)
         {
-            if (userId is null || token is null)
+            if (userId == null || token == null)
                 return BadRequest("Invalid email confirmation link.");
 
             var user = await _userManager.FindByIdAsync(userId);
 
-            if (user is null)
+            if (user == null)
                 return BadRequest("Invalid email parameters.");
 
             var result = await _userManager.ConfirmEmailAsync(user, token);
 
             if (!result.Succeeded)
-                return StatusCode(StatusCodes.Status500InternalServerError, "Your email is not confirmed.Please, try again later.");
+                return StatusCode(StatusCodes.Status500InternalServerError, "Your email is not confirmed. Please, try again later.");
 
             return Redirect(_configuration.GetSection("Client:AuthURL").Value);
         }
@@ -176,7 +145,7 @@ namespace TechStore.API.Controllers
 
         [AllowAnonymous]
         [HttpPost("role")]
-        public async Task<IActionResult> GetRole(TokenRequrest tokenRequest) {
+        public async Task<IActionResult> GetRole(TokenRequest tokenRequest) {
             var handler = new JwtSecurityTokenHandler();
             var jwtSecurityToken = handler.ReadJwtToken(tokenRequest.Token);
             var userEmail = jwtSecurityToken.Payload["email"].ToString();
@@ -202,34 +171,41 @@ namespace TechStore.API.Controllers
             return BadRequest("Bad request.");
         }
 
-        [AllowAnonymous]
         [HttpPost("refresh-token")]
-        public async Task<IActionResult> RefreshToken([FromBody] TokenRequrest tokenRequest)
+        public async Task<IActionResult> RefreshToken([FromBody] TokenRequest tokenRequest)
         {
-            if (ModelState.IsValid) {
-                var jwtToken = await VerifyAndGenerateToken(tokenRequest);
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("Invalid token request model state.");
+                return BadRequest("Bad token request.");
+            }
 
-                if (jwtToken == null) {
-                    return BadRequest(new AuthResponse()
-                    {
-                        Success = false,
-                        Errors = new List<string>() {
-                            "Invalid tokens"
-                        },
-                    });
+            try
+            {
+                var jwtToken = await VerifyAndGenerateTokenAsync(tokenRequest);
+
+                if (jwtToken == null)
+                {
+                    _logger.LogWarning("Invalid tokens provided for refresh.");
+                    return Unauthorized("Invalid tokens.");
                 }
+
+                _logger.LogInformation("Token refreshed successfully.");
                 return Ok(jwtToken);
             }
-            return BadRequest(new AuthResponse()
+            catch (UnauthorizedAccessException ex)
             {
-                Success = false,
-                Errors = new List<string>() {
-                    "Invalid parameters"
-                }
-            });
+                _logger.LogWarning(ex, "Unauthorized access attempt during token refresh.");
+                return Unauthorized("Invalid tokens.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while processing the token refresh request.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
-        private async Task<AuthResponse> VerifyAndGenerateToken(TokenRequrest tokenRequest)
+        private async Task<AuthResponse?> VerifyAndGenerateTokenAsync(TokenRequest tokenRequest)
         {
             var jwtTokenHandler = new JwtSecurityTokenHandler();
 
@@ -283,7 +259,7 @@ namespace TechStore.API.Controllers
                 _context.RefreshTokens.Update(storedToken);
                 await _context.SaveChangesAsync();
 
-                var user = await _userManager.FindByIdAsync(storedToken.UserId);
+                var user = await _userManager.FindByIdAsync(storedToken?.ApplicationUser?.Id);
 
                 return await GenerateJwtToken(user);
             }
@@ -341,7 +317,7 @@ namespace TechStore.API.Controllers
                 ExpiryDate = DateTime.UtcNow.AddMonths(6),
                 IsRevoked = false,
                 IsUsed = false,
-                UserId = user.Id
+                ApplicationUserId = user.Id
             };
 
             await _context.RefreshTokens.AddAsync(refreshToken); 
