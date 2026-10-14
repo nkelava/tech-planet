@@ -1,36 +1,48 @@
-﻿using TechStore.Application.Models.Base;
+﻿
 
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TechStore.Application.Models.Product
 {
-    public class ProductUpdateModel : BaseModel
+    public class ProductUpdateModel
     {
-        public string Name { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Please provide product name.")]
+        public string Name { get; set; }
 
-        public string Slug { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Please provide product slug.")]
+        [RegularExpression(@"^[a-z0-9]+(-[a-z0-9]+)*$", ErrorMessage = "Invalid slug format. Use lowercase letters, numbers and hyphens (e.g., 'this-is-a-slug-123').")]
+        public string Slug { get; set; }
 
-        public string ImageURL { get; set; } = string.Empty;
+        [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than zero.")]
+        public decimal? Price { get; set; }
 
-        public string Summary { get; set; } = string.Empty;
+        public bool? OnSale { get; set; }
 
-        public string Description { get; set; } = string.Empty;
 
-        public int Discount { get; set; } = 0;
+        [Range(0, int.MaxValue, ErrorMessage = "Discount cannot be negative.")]
+        public int? Discount {  get; set; }
 
-        public bool OnSale { get; set; } = false;
+        [Url(ErrorMessage = "Invalid image URL format.")]
+        public string? ImageURL { get; set; }
+        [NotMapped]
+        public IFormFile? Image { get; set; } = null;
+        public byte[]? ImageByte { get; set; }
 
-        public decimal SalePrice { get; set; } = 0;
 
-        public decimal Price { get; set; } = 0;
+        public string? Summary { get; set; }
 
-        public int UnitsInStock { get; set; } = 0;
+        public string? Description { get; set; }
 
-        public int UnitsSold { get; set; } = 0;
+        [Range(0, int.MaxValue, ErrorMessage = "Units in stock cannot be negative.")]
+        public int? UnitsInStock { get; set; }
 
-        public decimal Rating { get; set; } = 0;
 
+        public int? PromoCodeId { get; set; }
+
+        [Required(ErrorMessage = "Subcategory ID is required.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Subcategory ID must be greater than zero.")]
         public int SubcategoryId { get; set; }
-
-        public IList<int> PropertyIds { get; set; }
     }
 }

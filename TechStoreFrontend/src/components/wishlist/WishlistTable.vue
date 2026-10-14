@@ -1,9 +1,15 @@
 <script setup>
 import { useCartStore, useWishlistStore } from "@/store";
+import DefaultImage from "@/assets/images/test/products/defaultProductImage.png";
 
 const props = defineProps(["products"]);
 const cart = useCartStore();
 const wishlist = useWishlistStore();
+
+const handleCartTransfer = (product) => {
+  cart.addItem(product);
+  wishlist.removeItem(product?.id);
+};
 </script>
 
 <template>
@@ -19,7 +25,18 @@ const wishlist = useWishlistStore();
     <tbody>
       <tr v-for="product in props.products" :key="product.id">
         <td class="py-2">
-          <img :src="product.imageURL" class="border rounded-lg" width="150" height="150" />
+          <img
+            :src="
+              product?.imageURL
+                ? product.imageURL
+                : product?.imageByte
+                ? `data:image/jpeg;base64,` + product?.imageByte
+                : DefaultImage
+            "
+            class="border rounded-lg"
+            width="150"
+            height="150"
+          />
         </td>
         <td>{{ product.name }}</td>
         <td>${{ product.price }}</td>
@@ -29,9 +46,8 @@ const wishlist = useWishlistStore();
             color="green"
             variant="text"
             title="Add to Cart"
-            @click="cart.addItem(product)"
+            @click="handleCartTransfer(product)"
           />
-          <!-- TODO: implement favorites item deletion -->
           <v-btn
             icon="mdi-delete"
             color="red"

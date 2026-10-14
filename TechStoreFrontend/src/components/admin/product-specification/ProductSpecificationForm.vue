@@ -3,7 +3,7 @@ import { onMounted, ref } from "vue";
 import { useToast } from "vue-toastification";
 import { axiosPrivate } from "@/api/axios";
 import FormContainer from "@/components/common/FormContainer.vue";
-import { ITEM_CREATE_FAIL, ITEM_CREATE_SUCCESS } from "../../../constants/messages/create";
+import { ITEM_CREATE_FAIL, ITEM_CREATE_SUCCESS } from "@/constants/messages/create";
 
 const emit = defineEmits(["reload"]);
 const toast = useToast();
@@ -42,40 +42,49 @@ onMounted(async () => {
     .catch((error) => console.log(error));
 });
 
-async function handleSave() {
+const refetchProducts = async () => {
   await axiosPrivate
-    .post("/products/specification", {
-      productId: product.value,
+    .get("/products")
+    .then((resp) => {
+      if (resp?.status !== 200) return;
+      products.value = resp.data;
+    })
+    .catch((error) => console.log(error));
+};
+
+const handleSave = async () => {
+  if (productAttributes?.value.length < 1) {
+    toast.error("");
+  }
+  await axiosPrivate
+    .post(`/products/specification/${product.value}`, {
       productAttributes: productAttributes.value,
     })
-    .then((resp) => {
-      product.value = null;
-      attribute.value = null;
-      attributeValue.value = null;
-      productAttributes.value = null;
+    .then(() => {
+      resetForm();
       toast.success(ITEM_CREATE_SUCCESS);
       emit("relaod");
     })
     .catch((error) => {
-      console.log(error);
       toast.error(ITEM_CREATE_FAIL);
+      console.log(error);
     });
-}
+};
 
 function removeAttribute(attributeId, attributeValueId) {
-  productAttributes.value = productAttributes.value.filter(
+  productAttributes.value = productAttributes?.value.filter(
     (pa) => pa.attribute.id !== attributeId || pa.attributeValue.id !== attributeValueId
   );
 }
 
 function handleAttributeValuePairAdd() {
   if (attribute.value !== null && attributeValue.value !== null) {
-    const pairExists = productAttributes.value.find(
+    const pairExists = productAttributes?.value.find(
       (av) => av.attribute.id === attribute.value && av.attributeValue.id === attributeValue.value
     );
 
     if (!pairExists) {
-      productAttributes.value.push({
+      productAttributes?.value.push({
         attributeId: attribute.value,
         attribute: attributes.value.find((a) => a.id === attribute.value),
         attributeValueId: attributeValue.value,
@@ -87,6 +96,17 @@ function handleAttributeValuePairAdd() {
     }
   }
 }
+
+function resetForm() {
+  product.value = null;
+  attribute.value = null;
+  attributeValue.value = null;
+  productAttributes.value = null;
+
+  refetchProducts();
+}
+
+console.log("product spec: ", products);
 </script>
 
 <template>
@@ -132,7 +152,7 @@ function handleAttributeValuePairAdd() {
         </div>
         <div class="attribute__list">
           <v-chip v-for="(attributeValuePair, i) in productAttributes" :key="i" class="chip" label>
-            {{ attributeValuePair.attribute.name }} {{ attributeValuePair.attributeValue.value }}
+            {{ attributeValuePair.attribute.name }} - {{ attributeValuePair.attributeValue.value }}
             <v-btn
               class="chip__btn"
               icon="mdi-close-circle-outline"

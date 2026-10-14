@@ -1,6 +1,7 @@
-﻿using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
 using TechStore.Application.Interfaces.Services;
 using TechStore.Application.Models.Subcategory;
 
@@ -8,83 +9,272 @@ using TechStore.Application.Models.Subcategory;
 namespace TechStore.API.Controllers
 {
     [Route("api/subcategories")]
+    [Authorize(Roles = "Admin")]
     [ApiController]
     public class SubcategoryController : ControllerBase
     {
-        public readonly ISubcategoryService _subcategoryService;
-        public readonly IMapper _mapper;
+        private readonly ISubcategoryService _subcategoryService;
+        private readonly ILogger<SubcategoryController> _logger;
+        private static IWebHostEnvironment _webHostEnvironment;
 
-        public SubcategoryController(ISubcategoryService subcategoryService, IMapper mapper)
+
+        public SubcategoryController(ISubcategoryService subcategoryService, ILogger<SubcategoryController> logger, IWebHostEnvironment webHostEnvironment)
         {
             _subcategoryService = subcategoryService;
-            _mapper = mapper;
+            _logger = logger;
+            _webHostEnvironment = webHostEnvironment;
         }
 
-        [Authorize]
+
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] SubcategoryCreateModel subcategory)
+        public async Task<IActionResult> Create([FromForm] SubcategoryCreateModel subcategory)
         {
-            if (subcategory is null)
-                return BadRequest();
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            await _subcategoryService.CreateAsync(subcategory);
+            var existingSubcategory = await _subcategoryService.GetBySlugAsync(subcategory.Slug);
 
-            return Ok(subcategory);
+            if (existingSubcategory != null)
+                return BadRequest("Subcategory already exists.");
+
+            try
+            {
+                var subcategoryImage = subcategory?.Image;
+                subcategory.Image = null;
+
+                if (subcategoryImage != null && subcategoryImage.Length > 0)
+                {
+                    string path = _webHostEnvironment.WebRootPath + "\\subcategories\\";
+
+                    if (!Directory.Exists(path))
+                        Directory.CreateDirectory(path);
+
+                    string fileName = subcategory.Slug + ".png";
+
+                    if (System.IO.File.Exists(path + fileName))
+                    {
+                        System.IO.File.Delete(path + fileName);
+                    }
+
+                    using (FileStream fileStream = System.IO.File.Create(path + fileName))
+                    {
+                        subcategoryImage.CopyTo(fileStream);
+                        fileStream.Flush();
+                    }
+                }
+
+                await _subcategoryService.CreateAsync(subcategory);
+
+                _logger.LogInformation("Sucategory created with name {Name}% and slug {Slug}.", subcategory.Name, subcategory.Slug);
+                return Ok(subcategory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while creating the subcategory.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
-        [Authorize]
-        [HttpPut]
-        public async Task<IActionResult> Update([FromBody] SubcategoryUpdateModel subcategory)
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromForm] SubcategoryUpdateModel subcategory)
         {
-            if (subcategory is null)
-                return BadRequest();
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            await _subcategoryService.UpdateAsync(subcategory);
+            if (id < 1)
+            {
+                _logger.LogWarning("Invalid sucategory ID {Id}.", id);
+                return BadRequest("Invalid sucategory ID.");
+            }
 
-            return Ok(subcategory);
+            try
+            {
+                var subcategoryImage = subcategory?.Image;
+                subcategory.Image = null;
+                string path = _webHostEnvironment.WebRootPath + "\\subcategories\\";
+                string fileName = subcategory.Slug + ".png";
+
+                if (subcategoryImage != null && subcategoryImage.Length > 0)
+                {
+
+                    if (!Directory.Exists(path))
+                        Directory.CreateDirectory(path);
+
+                    if (System.IO.File.Exists(path + fileName))
+                    {
+                        System.IO.File.Delete(path + fileName);
+                    }
+
+                    using (FileStream fileStream = System.IO.File.Create(path + fileName))
+                    {
+                        subcategoryImage.CopyTo(fileStream);
+                        fileStream.Flush();
+                    }
+                }
+
+                var updatedSubcategory = await _subcategoryService.UpdateAsync(id, subcategory);
+
+                string newFileName = updatedSubcategory?.Slug + ".png";
+                var newPath = Path.Combine(_webHostEnvironment.WebRootPath, "subcategories", fileName);
+
+                if (System.IO.File.Exists(newPath))
+                {
+                    updatedSubcategory.ImageByte = System.IO.File.ReadAllBytes(newPath);
+                }
+
+
+                if (updatedSubcategory == null)
+                {
+                    _logger.LogWarning("Subcategory with ID {Id} was not found.", id);
+                    return NotFound("Subcategory not found.");
+                }
+
+                _logger.LogInformation("Subcategory with ID {Id} updated successfully.", updatedSubcategory.Id);
+                return Ok(updatedSubcategory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while updating the subcategory.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
-        [Authorize]
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             if (id < 1)
-                return BadRequest();
+            {
+                _logger.LogWarning("Invalid sucategory ID {Id}.", id);
+                return BadRequest("Invalid sucategory ID.");
+            }
 
-            await _subcategoryService.DeleteAsync(id);
+            try
+            {
+                int? deletedSubcategoryId = await _subcategoryService.DeleteAsync(id);
 
-            return Ok(id);
+                if (deletedSubcategoryId == null)
+                {
+                    _logger.LogWarning("Subcategory with ID {Id} was not found.", id);
+                    return NotFound("Subcategory not found.");
+                }
+
+                _logger.LogInformation("Subcategory with ID {Id} was deleted successfully.", id);
+                return Ok(deletedSubcategoryId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while deleting the subcategory with ID {Id}.", id);
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
+        [AllowAnonymous]
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetSubcategoryById(int id)
+        public async Task<IActionResult> GetById(int id)
         {
+            _logger.LogInformation("Received request to fetch subcategory with ID {Id}.", id);
+
             if (id < 1)
-                return BadRequest();
+            {
+                _logger.LogWarning("Invalid subcategory ID {Id}.", id);
+                return BadRequest("Invalid subcategory ID.");
+            }
 
-            var subcategory = await _subcategoryService.GetSubcategoryByIdAsync(id);
+            try
+            {
+                var subcategory = await _subcategoryService.GetByIdAsync(id);
+                string fileName = subcategory?.Slug + ".png";
+                var path = Path.Combine(_webHostEnvironment.WebRootPath, "subcategories", fileName);
 
-            return (subcategory is null) ? NotFound() : Ok(subcategory);
+                if (System.IO.File.Exists(path))
+                {
+                    subcategory.ImageByte = System.IO.File.ReadAllBytes(path);
+                }
+
+                if (subcategory == null)
+                {
+                    _logger.LogWarning("Subcategory with ID {Id} not found.", id);
+                    return NotFound("Subcategory not found.");
+                }
+
+                _logger.LogInformation("Subcategory with ID {Id} fetched successfully.", id);
+                return Ok(subcategory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching subcategories.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
-
+        [AllowAnonymous]
         [HttpGet("{slug}")]
-        public async Task<IActionResult> GetSubcategoryBySlug(string slug)
+        public async Task<IActionResult> GetBySlug(string slug)
         {
             if (string.IsNullOrWhiteSpace(slug))
-                return BadRequest();
+            {
+                _logger.LogWarning("Invalid subcategory slug {Slug}.", slug);
+                return BadRequest("Invalid subcategory slug.");
+            }
 
-            var subcategory = await _subcategoryService.GetSubcategoryBySlugAsync(slug);
+            try
+            {
+                var subcategory = await _subcategoryService.GetBySlugAsync(slug);
+                string fileName = subcategory?.Slug + ".png";
+                var path = Path.Combine(_webHostEnvironment.WebRootPath, "subcategories", fileName);
 
-            return (subcategory is null) ? NotFound() : Ok(subcategory);
+                if (System.IO.File.Exists(path))
+                {
+                    subcategory.ImageByte = System.IO.File.ReadAllBytes(path);
+                }
+
+
+                if (subcategory == null)
+                {
+                    _logger.LogWarning("Subcategory with slug {Slug} not found.", slug);
+                    return NotFound("Subcategory not found.");
+                }
+
+                _logger.LogInformation("Subcategory with slug {Slug} fetched successfully.", slug);
+                return Ok(subcategory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching subcategory.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
 
+        [AllowAnonymous]
         [HttpGet]
-        public async Task<IActionResult> GetAllSubcategories()
+        public async Task<IActionResult> GetAll()
         {
-            var subcategories = await _subcategoryService.GetAllSubcategoriesAsync();
+            _logger.LogInformation("Fetching all subcategories.");
+            try
+            {
+                var subcategories = await _subcategoryService.GetAllAsync();
+                string fileName = "";
+                string path = "";
 
-            return Ok(subcategories);
+                foreach (var subcategory in subcategories)
+                {
+                    fileName = subcategory?.Slug + ".png";
+                    path = Path.Combine(_webHostEnvironment.WebRootPath, "subcategories", fileName);
+
+                    if (System.IO.File.Exists(path))
+                    {
+                        subcategory.ImageByte = System.IO.File.ReadAllBytes(path);
+                    }
+                }
+
+                _logger.LogInformation("Successfully fetched all subcategories.");
+                return Ok(subcategories);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching subcategories.");
+                return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while processing your request.");
+            }
         }
     }
 }

@@ -13,20 +13,30 @@ namespace TechStore.Infrastructure.Repositories
         public ProductRepository(TechStoreContext techStoreContext)
             : base(techStoreContext) { }
 
-        public async Task<Product> GetProductByIdAsync(int productId) {
-            var product = await FindByCondition(p => p.Id.Equals(productId)).FirstOrDefaultAsync();
-            return product;
+
+        public async Task<Product?> GetByIdAsync(int id) {
+            return await FindByCondition(p => p.Id.Equals(id))
+                .Include(p => p.Subcategory)
+                    .ThenInclude(s => s.Category)
+                .FirstOrDefaultAsync();
         }
-        public async Task<Product> GetProductBySlugAsync(string slug)
+
+        public async Task<Product?> GetByIdWithoutSubcategoryAsync(int  id)
         {
-            var product = await FindByCondition(p => p.Slug.ToLower().Equals(slug.ToLower()))
+            return await FindByCondition(p => p.Id.Equals(id))
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<Product?> GetBySlugAsync(string slug)
+        {
+            return await FindByCondition(p => p.Slug.ToLower().Equals(slug.ToLower()))
                 .Include(p => p.ProductAttributes)
                     .ThenInclude(pas => pas.Attribute)
                 .Include(p => p.ProductAttributes)
                     .ThenInclude(pas => pas.AttributeValue)
+                .Include(p => p.Subcategory)
+                    .ThenInclude(s => s.Category)
                 .FirstOrDefaultAsync();
-            
-            return product;
         }
 
         public async Task<IEnumerable<Product>> GetAllProductsAsync()
@@ -35,9 +45,14 @@ namespace TechStore.Infrastructure.Repositories
             return await Find(spec).ToListAsync();
         }
 
-        public async Task<IEnumerable<Product>> GetProductsOnSaleAsync()
+        public async Task<IEnumerable<Product>> GetHotOffersAsync()
         {
-            return await FindByCondition(p => p.OnSale.Equals(true)).ToListAsync();
+            var spec = new ProductsWithSubcategorySpecification();
+            var products = await Find(spec)
+                .ToListAsync();
+
+            var sortedProducts = products.OrderByDescending(p => CalculateScore(p)).Take(12);
+            return sortedProducts;
         }
 
         public async Task<IEnumerable<Product>> GetNewProductsAsync()
@@ -76,6 +91,8 @@ namespace TechStore.Infrastructure.Repositories
             var spec = new ProductsWithSubcategorySpecification(subcategorySlug);
             //var products = await Find(spec).ToListAsync();
             var products = await Find(spec)
+                .Include(p => p.Subcategory)
+                    .ThenInclude(s => s.Category)
                 .Include(p => p.ProductAttributes)
                     .ThenInclude(pas => pas.Attribute)
                 .Include(p => p.ProductAttributes)
@@ -85,9 +102,12 @@ namespace TechStore.Infrastructure.Repositories
             return products;
         }
 
-        public async Task<IEnumerable<Product>> GetProductsByNameAsync(string productName)
+        public async Task<IEnumerable<Product>> SearchProductsAsync(string search)
         {
-            return await FindByCondition(p => p.Name.ToLower().Contains(productName.ToLower())).ToListAsync();
+            return await FindByCondition(p => p.Summary.ToLower().Contains(search.ToLower()))
+                .Include(p => p.Subcategory)
+                    .ThenInclude(s => s.Category)
+                .ToListAsync();
         }
 
 
@@ -99,6 +119,17 @@ namespace TechStore.Infrastructure.Repositories
         public async Task<IEnumerable<Product>> GetProductsByRatingAsync(decimal rating)
         {
             return await FindByCondition(p => p.Rating.Equals(rating)).ToListAsync();
+        }
+
+        private static decimal CalculateScore(Product product)
+        {
+            decimal score = 0;
+
+            score += product.UnitsSold * 0.5m;
+            score += product.Discount * 0.3m;
+            score += product.Rating * 0.2m;
+
+            return score;
         }
     }
 }

@@ -1,4 +1,42 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { axiosPrivate } from "@/api/axios";
+import { useUserStore } from "@/store";
+import { useToast } from "vue-toastification";
+
+const userGuard = (to, from, next) => {
+  const userStore = useUserStore();
+
+  if (userStore.isLoggedIn) {
+    next();
+  } else {
+    next("/");
+  }
+};
+
+const adminGuard = async (to, from, next) => {
+  const toast = useToast();
+  const userStore = useUserStore();
+
+  if (userStore.isLoggedIn) {
+    await axiosPrivate
+      .get("/users")
+      .then(async (resp) => {
+        if (resp?.data?.isAdmin) {
+          next();
+        } else {
+          next("/");
+        }
+      })
+      .catch(async (error) => {
+        console.log(error);
+        userStore.logoutUser();
+        toast.info("Your session has expired.");
+        next("/");
+      });
+  } else {
+    next("/");
+  }
+};
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -25,8 +63,30 @@ const router = createRouter({
     },
     {
       path: "/user",
-      name: "/user",
+      name: "user",
       component: () => import("../views/UserProfileView.vue"),
+      beforeEnter: userGuard,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/admin",
+      name: "admin",
+      component: () => import("../views/AdminView.vue"),
+      beforeEnter: adminGuard,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/checkout/success",
+      name: "checkout-success",
+      component: () => import("../views/CheckoutSuccess.vue"),
+      beforeEnter: userGuard,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: "/checkout/cancel",
+      name: "checkout-cancel",
+      component: () => import("../views/CheckoutCancel.vue"),
+      beforeEnter: userGuard,
       meta: { requiresAuth: true },
     },
     {
@@ -43,12 +103,6 @@ const router = createRouter({
       path: "/:category/:subcategory/:productSlug",
       name: "product",
       component: () => import("../views/ProductDetailsView.vue"),
-    },
-    {
-      path: "/admin",
-      name: "admin",
-      component: () => import("../views/AdminView.vue"),
-      meta: { requiresAuth: true },
     },
     {
       path: "/:pathMatch(.*)*",

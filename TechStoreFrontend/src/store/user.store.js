@@ -5,44 +5,38 @@ import { useCartStore, useWishlistStore } from "@/store";
 export const useUserStore = defineStore("user", {
   state: () => ({
     user: null,
-    error: null,
   }),
   getters: {
     isLoggedIn: (state) => !!state.user,
+    info: (state) => state.user,
   },
   actions: {
-    async getUser() {
-      if (!this.isLoggedIn) return;
-
-      // TODO
-      // const response = await axiosPrivate.get(`api/v1/user/${this.user.id}`);
-      // this.user = { ...response.data.user, accessToken: this.user.token };
-    },
-
     async loginUser(email, password) {
-      const cart = useCartStore();
-      const wishlist = useWishlistStore();
+      try {
+        const { data } = await axiosPublic.post("/auth/login", { email, password });
+        this.user = data;
 
-      await axiosPublic
-        .post("/auth/login", { email, password })
-        .then((response) => (this.user = response.data))
-        .catch((error) => (this.error = error.reponse ? error.response.data : error));
-
-      await cart.loadData();
-      await wishlist.loadData();
+        const cart = useCartStore();
+        const wishlist = useWishlistStore();
+        await Promise.all([cart.loadData(), wishlist.loadData()]);
+      } catch (error) {
+        throw error;
+      }
     },
 
-    async registerUser(email, password, confirmPassword) {
-      await axiosPublic
-        .post("/auth/register", {
+    async registerUser(firstName, lastName, email, password, confirmPassword) {
+      try {
+        await axiosPublic.post("/auth/register", {
+          firstName,
+          lastName,
           email,
           password,
           confirmPassword,
-          FirstName: "Test", // TODO
-          LastName: "Test", // TODO
-        })
-        .then((response) => (this.user = response.data))
-        .catch((error) => (this.error = error.reponse ? error.response.data : error));
+        });
+      } catch (error) {
+        this.error = error.response ? error.response.data : error;
+        throw error; // Propagate the error
+      }
     },
 
     async logoutUser() {
@@ -51,16 +45,18 @@ export const useUserStore = defineStore("user", {
 
       await axiosPrivate
         .get("/auth/logout")
-        .catch((error) => (this.error = error.reponse ? error.response.data : error));
-
-      await cart.clearStore();
-      await wishlist.clearStore();
-      this.clearStore();
+        .catch(async (error) => {
+          console.log(error);
+        })
+        .finally(async () => {
+          this.clearStore();
+          await cart.clearLocalStorage();
+          await wishlist.clearLocalStorage();
+        });
     },
 
-    async deleteUser() {
-      // TODO
-      // await axiosPrivate.delete(`api/v1/user/${this.user.id}`);
+    async updateTokens(token, refreshToken) {
+      console.log(this.user);
     },
 
     async clearStore() {

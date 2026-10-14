@@ -15,6 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="RestSharp" Version="110.2.0" />
+    <PackageReference Include="Stripe.net" Version="45.4.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
   </ItemGroup>
 
@@ -22,6 +23,11 @@
     <ProjectReference Include="..\TechStore.Application\TechStore.Application.csproj" />
     <ProjectReference Include="..\TechStore.Domain\TechStore.Domain.csproj" />
     <ProjectReference Include="..\TechStore.Infrastructure\TechStore.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\subcategories\" />
+    <Folder Include="wwwroot\products\" />
   </ItemGroup>
 
 </Project>

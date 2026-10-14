@@ -1,26 +1,29 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useVuelidate } from "@vuelidate/core";
 import { useToast } from "vue-toastification";
-import { axiosPrivate } from "@/api/axios";
+import { axiosPrivate, axiosPrivateFile } from "@/api/axios";
+import BaseInput from "@/components/common/BaseInput.vue";
 import FormContainer from "@/components/common/FormContainer.vue";
-import { ITEM_CREATE_FAIL, ITEM_CREATE_SUCCESS } from "../../../constants/messages/create";
+import { initialProductState, productRules } from "@/vuelidate/product";
+import { ITEM_CREATE_FAIL, ITEM_CREATE_SUCCESS } from "@/constants/messages/create";
+import { ITEM_UPDATE_FAIL, ITEM_UPDATE_SUCCESS } from "@/constants/messages/update";
 
-const emit = defineEmits(["reload"]);
+const props = defineProps({
+  id: {
+    type: [String, Number],
+    required: false,
+    default: null,
+  },
+});
+const emit = defineEmits(["reload", "clearSelectedId"]);
 const toast = useToast();
-const name = ref("Test");
-const slug = ref("test");
-const summary = ref("This is a summary.");
-const description = ref("This is a description.");
-const price = ref(1200);
-const onSale = ref(false);
-const discount = ref(0);
-const promoCode = ref(null);
-const unitsInStock = ref(25);
-const imageURL = ref(null);
-const subcategory = ref(null);
+const productState = reactive({ ...initialProductState });
 const promoCodes = ref([]);
 const subcategories = ref([]);
 const loading = ref(false);
+
+const v$ = useVuelidate(productRules, productState);
 
 onMounted(async () => {
   await axiosPrivate
@@ -29,7 +32,10 @@ onMounted(async () => {
       if (resp?.status !== 200) return;
       subcategories.value = resp.data;
     })
-    .catch((error) => console.log(error));
+    .catch((error) => {
+      toast.error("Failed to load subcategories.");
+      console.log(error);
+    });
 
   await axiosPrivate
     .get("/promo-codes")
@@ -37,94 +43,180 @@ onMounted(async () => {
       if (resp?.status !== 200) return;
       promoCodes.value = resp.data;
     })
-    .catch((error) => console.log(error));
+    .catch((error) => {
+      toast.error("Failed to load promo codes.");
+      console.log(error);
+    });
 });
 
-async function handleSave() {
-  await axiosPrivate
-    .post("/products", {
-      name: name.value,
-      slug: slug.value,
-      imageURL: imageURL?.value,
-      summary: summary.value,
-      description: description.value,
-      onSale: onSale.value,
-      price: price.value,
-      unitsInStock: unitsInStock.value,
-      promoCodeId: promoCode.value,
-      subcategoryId: subcategory.value,
-    })
-    .then((resp) => {
-      if (resp.status == 200) {
-        name.value = "Test";
-        slug.value = "test";
-        summary.value = "This is a summary.";
-        description.value = "This is a description.";
-        price.value = 1200;
-        onSale.value = false;
-        discount.value = 0;
-        promoCode.value = null;
-        unitsInStock.value = 25;
-        imageURL.value = null;
-        subcategory.value = null;
-        toast.success(ITEM_CREATE_SUCCESS);
-        emit("reload");
-      }
-    })
-    .catch((error) => {
-      console.log(error);
-      toast.error(ITEM_CREATE_FAIL);
-    });
+watch(
+  () => props?.id,
+  (newId) => {
+    if (newId) {
+      loadProduct(newId);
+    } else {
+      resetForm();
+    }
+  },
+  { immediate: true }
+);
+
+const formTitle = computed(() => (props.id ? "Edit Product" : "New Product"));
+
+async function loadProduct(id) {
+  try {
+    const { data, status } = await axiosPrivate.get(`/products/${id}`);
+
+    if (status === 200) {
+      productState.name = data?.name;
+      productState.slug = data?.slug;
+      productState.summary = data?.summary;
+      productState.description = data?.description;
+      productState.price = data?.price;
+      productState.onSale = data?.onSale;
+      productState.discount = data?.discount;
+      productState.promoCode = data?.promoCode;
+      productState.unitsInStock = data?.unitsInStock;
+      productState.imageURL = data?.imageURL;
+      productState.subcategory = data?.subcategory?.id;
+    }
+  } catch (error) {
+    toast.error("Failed to load product.");
+    console.error(error);
+  }
+}
+
+const handleSave = async () => {
+  if (!(await v$.value.$validate())) return;
+
+  const formData = new FormData();
+  loading.value = true;
+
+  formData.append("name", productState?.name);
+  formData.append("slug", productState?.slug);
+  formData.append("image", productState?.image[0]);
+  formData.append("summary", productState?.summary);
+  formData.append("description", productState?.description);
+  formData.append("onSale", productState?.onSale);
+  formData.append("discount", productState?.discount);
+  formData.append("price", productState?.price);
+  formData.append("unitsInStock", productState?.unitsInStock);
+
+  if (productState?.promoCode != null) {
+    formData.append("promoCodeId", productState?.promoCode);
+  }
+
+  formData.append("subcategoryId", productState?.subcategory);
+
+  // const payload = {
+  //   name: productState?.name,
+  //   slug: productState?.slug,
+  //   imageURL: productState?.imageURL,
+  //   summary: productState?.summary,
+  //   description: productState?.description,
+  //   onSale: productState?.onSale,
+  //   price: productState?.price,
+  //   unitsInStock: productState?.unitsInStock,
+  //   promoCodeId: productState?.promoCode,
+  //   subcategoryId: productState?.subcategory,
+  // };
+
+  try {
+    let resp;
+
+    if (props?.id) {
+      resp = await axiosPrivateFile.put(`/products/${props.id}`, formData);
+    } else {
+      resp = await axiosPrivateFile.post("/products", formData);
+    }
+
+    if (resp?.status == 200) {
+      resetForm();
+      toast.success(props?.id ? ITEM_UPDATE_SUCCESS : ITEM_CREATE_SUCCESS);
+      emit("clearSelectedId");
+      emit("reload");
+    }
+  } catch (error) {
+    toast.error(
+      error?.response?.data ? error.response.data : props?.id ? ITEM_UPDATE_FAIL : ITEM_CREATE_FAIL
+    );
+    console.log(error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleCancel = () => {
+  resetForm();
+  emit("clearSelectedId");
+};
+
+function resetForm() {
+  props.id = null;
+  v$.value.$reset();
+  Object.assign(productState, initialProductState);
 }
 </script>
 
 <template>
-  <form-container title="New Product">
-    <v-form @submit.prevent>
-      <v-text-field
-        v-model="name"
+  <form-container :title="formTitle">
+    <v-form @submit.prevent="handleSave">
+      <base-input
+        v-model="productState.name"
         class="mt-5"
+        name="name"
         label="Name"
+        :v$="v$.name"
         density="compact"
-        variant="outlined"
         hide-details="auto"
       />
-      <v-text-field
-        v-model="slug"
+      <base-input
+        v-model="productState.slug"
         class="mt-5"
+        name="slug"
         label="Slug"
+        :v$="v$.slug"
         density="compact"
-        variant="outlined"
         hide-details="auto"
       />
-      <v-text-field
-        v-model="summary"
+      <base-input
+        v-model="productState.summary"
         class="mt-5"
+        name="summary"
         label="Summary"
+        :v$="v$.summary"
         density="compact"
-        variant="outlined"
         hide-details="auto"
       />
       <v-textarea
-        v-model="description"
+        v-model="productState.description"
         class="mt-5"
+        name="description"
         label="Description"
         variant="outlined"
         hide-details="auto"
+        :error-messages="v$?.description?.$errors.map((e) => e.$message)"
       />
-      <v-text-field
-        v-model="price"
+      <base-input
+        v-model="productState.price"
         type="number"
         class="mt-5"
+        name="price"
         label="Price"
+        :v$="v$.price"
         density="compact"
-        variant="outlined"
         hide-details="auto"
         min="0"
       />
-      <v-checkbox v-model="onSale" class="mt-5" label="On Sale" hide-details="auto"></v-checkbox>
-      <v-text-field
-        v-model="discount"
+      <v-checkbox
+        v-model="productState.onSale"
+        class="mt-5"
+        label="On Sale"
+        hide-details="auto"
+      ></v-checkbox>
+      <base-input
+        v-model="productState.discount"
+        name="discount"
         type="number"
         class="mt-5"
         label="Discount"
@@ -133,10 +225,11 @@ async function handleSave() {
         hide-details="auto"
         min="0"
         max="100"
-        :disabled="!onSale"
+        :disabled="!productState.onSale"
       />
-      <v-select
-        v-model="promoCode"
+      <!-- TODO -->
+      <!-- <v-select
+        v-model="productState.promoCode"
         class="mt-5"
         label="Promo Code"
         :items="promoCodes"
@@ -145,9 +238,10 @@ async function handleSave() {
         density="compact"
         hide-details="auto"
         variant="outlined"
-      ></v-select>
-      <v-text-field
-        v-model="unitsInStock"
+        clearable
+      ></v-select> -->
+      <base-input
+        v-model="productState.unitsInStock"
         type="number"
         class="mt-5"
         label="Units in stock"
@@ -156,17 +250,30 @@ async function handleSave() {
         hide-details="auto"
         min="0"
       />
-      <v-file-input
-        v-model="imageURL"
+      <!-- TODO: Add image upload -->
+      <!-- <base-input
+        v-model="productState.imageURL"
         class="mt-5"
+        name="imageURL"
         label="Image"
+        :v$="v$.imageURL"
         density="compact"
-        variant="outlined"
         hide-details="auto"
-      ></v-file-input>
+      /> -->
+      <v-file-input
+        v-model="productState.image"
+        name="image"
+        label="Image upload"
+        accept="image/*"
+        variant="outlined"
+        density="compact"
+        hide-details="auto"
+        show-size
+      />
       <v-select
-        v-model="subcategory"
+        v-model="productState.subcategory"
         class="mt-5"
+        name="subcategory"
         label="Subcategory"
         :items="subcategories"
         item-value="id"
@@ -174,8 +281,18 @@ async function handleSave() {
         density="compact"
         hide-details="auto"
         variant="outlined"
+        :error-messages="v$?.subcategory?.$errors.map((e) => e.$message)"
       ></v-select>
-      <v-btn type="submit" class="form__btn" :loading="loading" @click="handleSave">Save</v-btn>
+      <v-btn
+        v-if="props?.id"
+        type="button"
+        class="form__btn mr-5"
+        :loading="loading"
+        :disabled="loading"
+        @click="handleCancel"
+        >Cancel</v-btn
+      >
+      <v-btn type="submit" class="form__btn" :loading="loading" :disabled="loading">Save</v-btn>
     </v-form>
   </form-container>
 </template>
@@ -188,50 +305,5 @@ async function handleSave() {
   color: var(--ts-c-text-dark);
   width: 100%;
   max-width: 300px !important;
-}
-
-.attribute__add {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-}
-
-.attribute__list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  min-height: 50px;
-  margin-top: 15px;
-  border: 2px dashed var(--ts-c-bg-light);
-  border-radius: 5px;
-}
-
-.btn--add {
-  margin-top: 20px;
-  font-weight: bold;
-  background-color: var(--ts-c-bg-light);
-  color: var(--ts-c-text-dark);
-}
-
-.chip {
-  display: flex;
-  margin: 5px;
-}
-
-.chip__btn {
-  margin-left: 10px;
-  background: transparent;
-  color: var(--ts-c-danger);
-  border: none;
-  outline: none;
-  box-shadow: none !important;
-}
-
-@media only screen and (min-width: 40em) {
-  .attribute__add {
-    flex-direction: row;
-    align-items: center;
-  }
 }
 </style>

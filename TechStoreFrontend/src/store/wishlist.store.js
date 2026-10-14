@@ -27,16 +27,12 @@ export const useWishlistStore = defineStore("wishlist", {
 
       try {
         if (this.isUserLoggedIn) {
-          const resp = await axiosPrivate
-            .post("/wishlists", {
-              productId: item?.id,
-            })
-            .catch((error) => {
-              toast.error(
-                "Oops! Something went wrong while adding the product to your wishlist. Please try again later or contact support for assistance."
-              );
-              console.log(error);
-            });
+          const resp = await axiosPrivate.post(`/wishlists/${item?.id}`).catch((error) => {
+            toast.error(
+              "Oops! Something went wrong while adding the product to your wishlist. Please try again later or contact support for assistance."
+            );
+            console.log(error);
+          });
 
           if (!resp?.data) return;
         }
@@ -119,6 +115,9 @@ export const useWishlistStore = defineStore("wishlist", {
     },
 
     async clearStore() {
+      this.$reset();
+    },
+    async clearLocalStorage() {
       this.$reset();
     },
   },

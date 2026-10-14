@@ -4,7 +4,8 @@ using TechStore.Application.Interfaces.Services;
 using TechStore.Application.Models.Cart;
 using TechStore.Application.Models.Product;
 using TechStore.Application.Specifications.CartSpecification;
-using TechStore.Domain.Entities.Cart;
+using TechStore.Domain.Entities.CartAggregate;
+using TechStore.Domain.Entities.User;
 
 
 namespace TechStore.Application.Services
@@ -21,57 +22,65 @@ namespace TechStore.Application.Services
         }
 
 
-        public async Task AddProductAsync(string email, int productId, int quantity)
+        public async Task<CartReadModel?> AddProductAsync(ApplicationUser user, CartCreateModel createModel)
         {
-            var cart = await GetExistingOrCreateNewCart(email);
-            var product = await _repository.Product.GetProductByIdAsync(productId);
+            var cart = await GetExistingOrCreateNewCart(user);
+            var product = await _repository.Product.GetByIdAsync(createModel.ProductId);
 
-            if (product is not null)
-            {
-                cart.AddProduct(product, quantity, unitPrice: product.Price);
+            if (product == null)
+                return null;
 
-                _repository.Cart.Update(cart);
-                await _repository.SaveAsync();
-            }
+            cart.AddProduct(product, createModel.Quantity, unitPrice: product.Price);
+            
+            _repository.Cart.Update(cart);
+            await _repository.SaveAsync();
+
+            var cartModel = _mapper.Map<CartReadModel>(cart);
+            return cartModel;
         }
 
-
-        public async Task RemoveProductAsync(int cartId, int productId)
+        public async Task<CartReadModel?> RemoveProductAsync(int cartId, int productId)
         {
             var spec = new CartWithProductsSpecification(cartId);
             var cart = _repository.Cart.Find(spec).FirstOrDefault();
+            
+            if (cart == null)
+                return null;
 
-            if (cart is null)
-                return;
+            var removedProductId = cart.RemoveProduct(productId);
 
-            cart.RemoveProduct(productId);
+            if (removedProductId == null)
+                return null;
 
             _repository.Cart.Update(cart);
             await _repository.SaveAsync();
+
+            var cartModel = _mapper.Map<CartReadModel>(cart);
+            return cartModel;
         }
 
-
-        public async Task<int> ClearCart(string email)
+        public async Task<CartReadModel?> ClearCart(ApplicationUser user)
         {
-            var cart = await _repository.Cart.GetByEmailAsync(email);
+            var cart = await _repository.Cart.GetByUserIdAsync(user.Id);
 
-            if (cart is null)
-                return 0;
+            if (cart == null)
+                return null;
 
             cart.Clear();
 
             _repository.Cart.Update(cart);
             await _repository.SaveAsync();
-            return cart.Id;
+
+            var cartModel = _mapper.Map<CartReadModel>(cart);
+            return cartModel;
         }
 
-
-        public async Task<CartReadModel> GetByEmailAsync(string email)
+        public async Task<CartReadModel> GetAsync(ApplicationUser user)
         {
-            var cart = await GetExistingOrCreateNewCart(email);
+            var cart = await GetExistingOrCreateNewCart(user);
             var cartModel = _mapper.Map<CartReadModel>(cart);
 
-            // If product can't be loaded from page we than manual map it
+            // If product can't be loaded from page we than manually map it
             if (cart.Products.Any(c => c.Product == null))
             {
                 cartModel.Products.Clear();
@@ -79,7 +88,7 @@ namespace TechStore.Application.Services
                 foreach (var item in cart.Products)
                 {
                     var cartProductModel = _mapper.Map<CartProductModel>(item);
-                    var product = await _repository.Product.GetProductByIdAsync(item.ProductId);
+                    var product = await _repository.Product.GetByIdAsync(item.ProductId);
                     var productModel = _mapper.Map<ProductReadModel>(product);
                     cartProductModel.Product = productModel;
                     cartModel.Products.Add(cartProductModel);
@@ -89,17 +98,16 @@ namespace TechStore.Application.Services
             return cartModel;
         }
 
-
-        private async Task<Cart> GetExistingOrCreateNewCart(string email)
+        private async Task<Cart> GetExistingOrCreateNewCart(ApplicationUser user)
         {
-            var cart = await _repository.Cart.GetByEmailAsync(email);
+            var cart = await _repository.Cart.GetByUserIdAsync(user.Id);
 
-            if (cart is not null)
+            if (cart != null)
                 return cart;
 
             // If it's first time create new cart
             var newCart = new Cart {
-                Email = email
+                ApplicationUserId = user.Id
             };
 
             _repository.Cart.Add(newCart);

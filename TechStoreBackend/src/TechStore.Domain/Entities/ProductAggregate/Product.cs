@@ -1,9 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 using TechStore.Domain.Entities.Base;
-using TechStore.Domain.Entities.Cart;
+using TechStore.Domain.Entities.CartAggregate;
 using TechStore.Domain.Entities.OrderAggregate;
 using TechStore.Domain.Entities.SubcategoryAggregate;
-using TechStore.Domain.Entities.Wishlist;
+using TechStore.Domain.Entities.WishlistAggregate;
 
 
 namespace TechStore.Domain.Entities.ProductAggregate
@@ -14,6 +16,9 @@ namespace TechStore.Domain.Entities.ProductAggregate
         public string Name { get; set; }
         public string Slug { get; set; }
         public string? ImageURL { get; set; } = null;
+        [NotMapped]
+        public IFormFile? Image { get; set; } = null;
+        public byte[]? ImageByte { get; set; }
         public string Summary { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public decimal Price { get; set; } = 0;
@@ -32,10 +37,10 @@ namespace TechStore.Domain.Entities.ProductAggregate
         public int? PromoCodeId { get; set; }
         public PromoCode PromoCode {  get; set; }
 
-        //// 1 - n
+        // 1 - n
         public List<Review> Reviews { get; set; }
 
-        //// n - n
+        // n - n
         public List<ProductAttributeSet> ProductAttributes { get; set; }
         public List<OrderProduct> Orders { get; set; }
         public List<CartProduct> Carts { get; set; }

@@ -13,13 +13,18 @@ const emit = defineEmits(["toggleDialog"]);
 const cart = useCartStore();
 const toast = useToast();
 const hasDeliveryAddress = ref(false);
-
-const paymentState = reactive({
-  ...initPaymentState,
-});
-const deliveryState = reactive({
-  ...initDeliveryState,
-});
+const paymentState = reactive({ ...initPaymentState });
+const deliveryState = reactive({ ...initDeliveryState });
+const paymentMethods = [
+  {
+    name: "Cash",
+    value: 0,
+  },
+  {
+    name: "Credit card",
+    value: 1,
+  },
+];
 
 const paymentValidationRules = computed(() => paymentRules);
 const deliveryValidationRules = computed(() => deliveryRules);
@@ -28,18 +33,10 @@ const vp$ = useVuelidate(paymentValidationRules, paymentState);
 const vd$ = useVuelidate(deliveryValidationRules, deliveryState);
 
 const handleSubmit = async () => {
-  const isPaymentFormValid = await vp$.value.$validate();
-
-  if (!isPaymentFormValid) {
-    return;
-  }
+  if (!(await vp$.value.$validate())) return;
 
   if (hasDeliveryAddress.value) {
-    const isDeliveryFormValid = await vd$.value.$validate();
-
-    if (!isDeliveryFormValid) {
-      return;
-    }
+    if (!(await vd$.value.$validate())) return;
   }
 
   const order = {
@@ -49,33 +46,58 @@ const handleSubmit = async () => {
   };
 
   try {
-    await axiosPublic.post("/orders", order).catch((error) => console.log(error));
+    await axiosPrivate
+      .post("/orders", order)
+      .then(async (resp) => {
+        if (resp?.status !== 200) {
+          toast.error("Uh-oh! There was an issue processing your order. Please try again.");
+          return;
+        }
+
+        if (resp?.data?.redirectUrl) {
+          window.location.href = resp.data.redirectUrl;
+        }
+
+        await cart.clearStore();
+
+        if (cart.isUserLoggedIn) {
+          const resp = await axiosPrivate.delete("/carts").catch((error) => console.log(error));
+
+          if (resp?.status !== 200) {
+            toast.error("Uh-oh! There was an issue while cleaning your cart. Please try again.");
+            return;
+          }
+        }
+      })
+      .catch((error) => {
+        toast.error("Uh-oh! There was an issue processing your order. Please try again.");
+        console.log(error);
+      });
+
+    // TODO: check if cart is cleared on the backend
     await cart.clearStore();
 
     if (cart.isUserLoggedIn) {
       const resp = await axiosPrivate.delete("/carts").catch((error) => console.log(error));
 
-      if (resp.status !== 200) {
+      if (resp?.status !== 200) {
         toast.error("Uh-oh! There was an issue processing your order. Please try again.");
         return;
       }
     }
 
     toast.success("Order received! Thank you for choosing us.");
-    clearForm(vp$, paymentState, initPaymentState);
-    clearForm(vd$, deliveryState, initDeliveryState);
+    resetForm(vp$, paymentState, initPaymentState);
+    resetForm(vd$, deliveryState, initDeliveryState);
     emit("toggleDialog");
   } catch {
     toast.error("Uh-oh! There was an issue processing your order. Please try again.");
   }
 };
 
-const clearForm = (form, formState, initialFormState) => {
+const resetForm = (form, formState, initialFormState) => {
   form.value.$reset();
-
-  for (const [key, value] of Object.entries(initialFormState)) {
-    formState[key] = value;
-  }
+  Object.assign(formState, initialFormState);
 };
 
 const closeDialog = () => {
@@ -132,6 +154,19 @@ const closeDialog = () => {
                   v-model="paymentState.contactNumber"
                   :v$="vp$.contactNumber"
                   label="Contact Number*"
+                />
+                <v-select
+                  v-model="paymentState.paymentMethod"
+                  class="mt-5 test"
+                  name="paymentMethod"
+                  label="Payment Method*"
+                  :items="paymentMethods"
+                  item-value="value"
+                  item-title="name"
+                  density="compact"
+                  hide-details="auto"
+                  variant="outlined"
+                  :error-messages="vp$?.paymentMethod?.$errors.map((e) => e.$message)"
                 />
 
                 <v-checkbox
@@ -195,9 +230,7 @@ const closeDialog = () => {
       </v-container>
       <v-card-actions class="justify-space-between">
         <v-btn class="btn-action--cancel" variant="text" @click="closeDialog"> Back To Cart </v-btn>
-        <v-btn class="btn-action--submit" variant="text" @click="handleSubmit">
-          Complete Order
-        </v-btn>
+        <v-btn class="btn-action--submit" variant="text" @click="handleSubmit"> Complete </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

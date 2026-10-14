@@ -13,20 +13,27 @@ namespace TechStore.Infrastructure.Repositories
         public OrderRepository(TechStoreContext techStoreContext)
             : base(techStoreContext) { }
 
-        public async Task<Order> GetOrderByIdAsync(int orderId)
+
+        public async Task<Order?> GetByIdAsync(int id)
         {
-            var spec = new OrderWithProductsSpecification(orderId);
+            var spec = new OrderWithProductsSpecification(id);
             return await Find(spec).FirstOrDefaultAsync();
         }
-        
-        public async Task<IEnumerable<Order>> GetAllOrdersAsync()
+        public async Task<Order?> GetBySessionIdAsync(string sessionId)
+        {
+            return await FindByCondition(o => o.SessionId != null && o.SessionId.Equals(sessionId))
+                .Include(o => o.Products)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<IEnumerable<Order>> GetAllAsync()
         {
             return await FindAll().ToListAsync();
         }
 
-        public async Task<IEnumerable<Order>> GetAllOrdersAsync(string email)
+        public async Task<IEnumerable<Order>> GetAllAsync(string userId)
         {
-            return await FindByCondition(o => o.Email.ToLower().Equals(email.ToLower())).ToListAsync();
+            return await FindByCondition(o => o.ApplicationUserId != null && o.ApplicationUserId.Equals(userId)).ToListAsync();
         }
     }
 }

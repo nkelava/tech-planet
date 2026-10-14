@@ -3,6 +3,7 @@ using TechStore.Application.Interfaces.Repositories.Base;
 using TechStore.Application.Interfaces.Services;
 using TechStore.Application.Models.Product;
 using TechStore.Domain.Entities.ProductAggregate;
+using TechStore.Domain.Entities.SubcategoryAggregate;
 
 
 namespace TechStore.Application.Services
@@ -18,6 +19,7 @@ namespace TechStore.Application.Services
             _mapper = mapper;
         }
 
+
         public async Task CreateAsync(ProductCreateModel productModel)
         {
             var product = _mapper.Map<Product>(productModel);
@@ -26,32 +28,53 @@ namespace TechStore.Application.Services
             await _repository.SaveAsync();
         }
 
-        public async Task AddSpecificationAsync(int productId, List<ProductAttributeSetModel> productAttributes)
+        public async Task<ProductReadModel?> AddSpecificationAsync(int id, List<ProductAttributeSetModel> productAttributes)
         {
-            var product = await _repository.Product.GetProductByIdAsync(productId);
-            //var productAttributeSets = new List<ProductAttributeSet>();
+            var product = await _repository.Product.GetByIdAsync(id);
+
+            if (product == null)
+                return null;
 
             foreach (var attributeSet in productAttributes)
             {
-                _repository.ProductAttributeSet.Add(new ProductAttributeSet
+                var newProductSet = new ProductAttributeSet
                 {
                     ProductId = product.Id,
                     AttributeId = attributeSet.AttributeId,
                     AttributeValueId = attributeSet.AttributeValueId,
-                });
+                };
+
+                _repository.ProductAttributeSet.Add(newProductSet);
             }
 
-            //_repository.ProductAttributeSet.AddRange(productAttributeSets);
             await _repository.SaveAsync();
+
+            var productModel = _mapper.Map<ProductReadModel>(product);
+            return productModel;
         }
 
-
-        public async Task<int> DeleteAsync(int productId)
+        public async Task<ProductReadModel?> UpdateAsync(int id, ProductUpdateModel product)
         {
-            var product = await _repository.Product.GetProductByIdAsync(productId);
+            var existingProduct = await _repository.Product.GetByIdAsync(id);
+
+            if (existingProduct == null)
+                return null;
+
+            _mapper.Map(product, existingProduct);
+
+            _repository.Product.Update(existingProduct);
+            await _repository.SaveAsync();
+
+            var productModel = _mapper.Map<ProductReadModel>(existingProduct);
+            return productModel;
+        }
+
+        public async Task<int?> DeleteAsync(int id)
+        {
+            var product = await _repository.Product.GetByIdAsync(id);
 
             if (product == null)
-                return 0;
+                return null;
 
             _repository.Product.Delete(product);
             await _repository.SaveAsync();
@@ -59,27 +82,25 @@ namespace TechStore.Application.Services
             return product.Id;
         }
 
-        public async Task UpdateAsync(ProductUpdateModel product)
+        public async Task<ProductReadModel?> GetByIdAsync(int id)
         {
-            var movieMapped = _mapper.Map<Product>(product);
+            var product = await _repository.Product.GetByIdAsync(id);
 
-            _repository.Product.Update(movieMapped);
-            await _repository.SaveAsync();
-        }
+            if (product == null)
+                return null;
 
-        public async Task<ProductReadModel> GetProductByIdAsync(int productId)
-        {
-            var product = await _repository.Product.GetProductByIdAsync(productId);
             var productMapped = _mapper.Map<ProductReadModel>(product);
-
             return productMapped;
         }
 
-        public async Task<ProductReadModel> GetProductBySlugAsync(string slug)
+        public async Task<ProductReadModel?> GetBySlugAsync(string slug)
         {
-            var product = await _repository.Product.GetProductBySlugAsync(slug);
-            var productMapped = _mapper.Map<ProductReadModel>(product);
+            var product = await _repository.Product.GetBySlugAsync(slug);
 
+            if (product == null)
+                return null;
+
+            var productMapped = _mapper.Map<ProductReadModel>(product);
             return productMapped;
         }
 
@@ -91,9 +112,9 @@ namespace TechStore.Application.Services
             return productsMapped;
         }
 
-        public async Task<IEnumerable<ProductReadModel>> GetProductsOnSaleAsync()
+        public async Task<IEnumerable<ProductReadModel>> GetHotOffersAsync()
         {
-            var products = await _repository.Product.GetProductsOnSaleAsync();
+            var products = await _repository.Product.GetHotOffersAsync();
             var productsMapped = _mapper.Map<IList<ProductReadModel>>(products);
 
             return productsMapped;
@@ -123,25 +144,35 @@ namespace TechStore.Application.Services
             return productsMapped;
         }
 
-        public async Task<IEnumerable<ProductReadModel>> GetProductsBySubcategoryIdAsync(int subcategoryId)
+        public async Task<IEnumerable<ProductReadModel>?> GetProductsBySubcategoryIdAsync(int subcategoryId)
         {
+            var subcategory = await _repository.Subcategory.GetByIdAsync(subcategoryId);
+
+            if (subcategory == null)
+                return null;
+
             var products = await _repository.Product.GetProductsBySubcategoryIdAsync(subcategoryId);
             var productsMapped = _mapper.Map<IList<ProductReadModel>>(products);
 
             return productsMapped;
         }
 
-        public async Task<IEnumerable<ProductReadModel>> GetProductsBySubcategorySlugAsync(string subcategorySlug)
+        public async Task<IEnumerable<ProductReadModel>?> GetProductsBySubcategorySlugAsync(string subcategorySlug)
         {
+            var subcategory = await _repository.Subcategory.GetBySlugAsync(subcategorySlug);
+
+            if (subcategory == null)
+                return null;
+
             var products = await _repository.Product.GetProductsBySubcategorySlugAsync(subcategorySlug);
             var productsMapped = _mapper.Map<IList<ProductReadModel>>(products);
 
             return productsMapped;
         }
 
-        public async Task<IEnumerable<ProductReadModel>> GetProductsByNameAsync(string productsName)
+        public async Task<IEnumerable<ProductReadModel>> SearchProductsAsync(string search)
         {
-            var products = await _repository.Product.GetProductsByNameAsync(productsName);
+            var products = await _repository.Product.SearchProductsAsync(search);
             var productsMapped = _mapper.Map<IList<ProductReadModel>>(products);
 
             return productsMapped;

@@ -155,7 +155,7 @@ namespace TechStore.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("TechStore.Application.Models.Authorization.RefreshToken", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.CartAggregate.Cart", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -163,59 +163,19 @@ namespace TechStore.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("ExpiryDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsRevoked")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsUsed")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("JwtId")
+                    b.Property<string>("ApplicationUserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("RefreshToken", (string)null);
-                });
-
-            modelBuilder.Entity("TechStore.Domain.Entities.Cart.Cart", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
 
                     b.Property<decimal>("TotalPrice")
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
-
                     b.ToTable("Cart", (string)null);
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Cart.CartProduct", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.CartAggregate.CartProduct", b =>
                 {
                     b.Property<int>("CartId")
                         .HasColumnType("int");
@@ -306,6 +266,9 @@ namespace TechStore.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
+                    b.Property<string>("ApplicationUserId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<string>("City")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -333,7 +296,19 @@ namespace TechStore.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("ShippedAt")
+                    b.Property<string>("PaymentIntentId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PaymentStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SessionId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ShippedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ShippingAddress")
@@ -353,6 +328,8 @@ namespace TechStore.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ApplicationUserId");
 
                     b.ToTable("Order", (string)null);
                 });
@@ -398,6 +375,9 @@ namespace TechStore.Infrastructure.Migrations
 
                     b.Property<int>("Discount")
                         .HasColumnType("int");
+
+                    b.Property<byte[]>("ImageByte")
+                        .HasColumnType("varbinary(max)");
 
                     b.Property<string>("ImageURL")
                         .HasColumnType("nvarchar(max)");
@@ -567,13 +547,17 @@ namespace TechStore.Infrastructure.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Discount")
                         .HasColumnType("int");
+
+                    b.Property<DateTime>("ExpirationDate")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -633,12 +617,15 @@ namespace TechStore.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<byte[]>("ImageByte")
+                        .HasColumnType("varbinary(max)");
+
                     b.Property<string>("ImageURL")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -650,9 +637,6 @@ namespace TechStore.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
 
                     b.HasIndex("Slug")
                         .IsUnique();
@@ -666,6 +650,9 @@ namespace TechStore.Infrastructure.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<int>("AccessFailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CartId")
                         .HasColumnType("int");
 
                     b.Property<string>("ConcurrencyStamp")
@@ -710,6 +697,9 @@ namespace TechStore.Infrastructure.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("RefreshTokenId")
+                        .HasColumnType("int");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
@@ -720,7 +710,14 @@ namespace TechStore.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<int?>("WishlistId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CartId")
+                        .IsUnique()
+                        .HasFilter("[CartId] IS NOT NULL");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -730,10 +727,14 @@ namespace TechStore.Infrastructure.Migrations
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
+                    b.HasIndex("RefreshTokenId")
+                        .IsUnique()
+                        .HasFilter("[RefreshTokenId] IS NOT NULL");
+
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Wishlist.Wishlist", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.User.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -741,19 +742,53 @@ namespace TechStore.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
-                    b.Property<string>("Email")
+                    b.Property<string>("ApplicationUserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsUsed")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("JwtId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
+                    b.ToTable("RefreshToken", (string)null);
+                });
+
+            modelBuilder.Entity("TechStore.Domain.Entities.WishlistAggregate.Wishlist", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<string>("ApplicationUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
 
                     b.ToTable("Wishlist", (string)null);
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Wishlist.WishlistProduct", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.WishlistAggregate.WishlistProduct", b =>
                 {
                     b.Property<int>("WishlistId")
                         .HasColumnType("int");
@@ -819,9 +854,9 @@ namespace TechStore.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Cart.CartProduct", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.CartAggregate.CartProduct", b =>
                 {
-                    b.HasOne("TechStore.Domain.Entities.Cart.Cart", "Cart")
+                    b.HasOne("TechStore.Domain.Entities.CartAggregate.Cart", "Cart")
                         .WithMany("Products")
                         .HasForeignKey("CartId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -847,6 +882,15 @@ namespace TechStore.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("TechStore.Domain.Entities.OrderAggregate.Order", b =>
+                {
+                    b.HasOne("TechStore.Domain.Entities.User.ApplicationUser", "ApplicationUser")
+                        .WithMany("Orders")
+                        .HasForeignKey("ApplicationUserId");
+
+                    b.Navigation("ApplicationUser");
                 });
 
             modelBuilder.Entity("TechStore.Domain.Entities.OrderAggregate.OrderProduct", b =>
@@ -934,7 +978,28 @@ namespace TechStore.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Wishlist.WishlistProduct", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.User.ApplicationUser", b =>
+                {
+                    b.HasOne("TechStore.Domain.Entities.CartAggregate.Cart", "Cart")
+                        .WithOne("ApplicationUser")
+                        .HasForeignKey("TechStore.Domain.Entities.User.ApplicationUser", "CartId");
+
+                    b.HasOne("TechStore.Domain.Entities.WishlistAggregate.Wishlist", "Wishlist")
+                        .WithOne("ApplicationUser")
+                        .HasForeignKey("TechStore.Domain.Entities.User.ApplicationUser", "CartId");
+
+                    b.HasOne("TechStore.Domain.Entities.User.RefreshToken", "RefreshToken")
+                        .WithOne("ApplicationUser")
+                        .HasForeignKey("TechStore.Domain.Entities.User.ApplicationUser", "RefreshTokenId");
+
+                    b.Navigation("Cart");
+
+                    b.Navigation("RefreshToken");
+
+                    b.Navigation("Wishlist");
+                });
+
+            modelBuilder.Entity("TechStore.Domain.Entities.WishlistAggregate.WishlistProduct", b =>
                 {
                     b.HasOne("TechStore.Domain.Entities.ProductAggregate.Product", "Product")
                         .WithMany("WishLists")
@@ -942,7 +1007,7 @@ namespace TechStore.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TechStore.Domain.Entities.Wishlist.Wishlist", "Wishlist")
+                    b.HasOne("TechStore.Domain.Entities.WishlistAggregate.Wishlist", "Wishlist")
                         .WithMany("Products")
                         .HasForeignKey("WishlistId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -953,8 +1018,10 @@ namespace TechStore.Infrastructure.Migrations
                     b.Navigation("Wishlist");
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Cart.Cart", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.CartAggregate.Cart", b =>
                 {
+                    b.Navigation("ApplicationUser");
+
                     b.Navigation("Products");
                 });
 
@@ -993,8 +1060,20 @@ namespace TechStore.Infrastructure.Migrations
                     b.Navigation("Subcategories");
                 });
 
-            modelBuilder.Entity("TechStore.Domain.Entities.Wishlist.Wishlist", b =>
+            modelBuilder.Entity("TechStore.Domain.Entities.User.ApplicationUser", b =>
                 {
+                    b.Navigation("Orders");
+                });
+
+            modelBuilder.Entity("TechStore.Domain.Entities.User.RefreshToken", b =>
+                {
+                    b.Navigation("ApplicationUser");
+                });
+
+            modelBuilder.Entity("TechStore.Domain.Entities.WishlistAggregate.Wishlist", b =>
+                {
+                    b.Navigation("ApplicationUser");
+
                     b.Navigation("Products");
                 });
 #pragma warning restore 612, 618

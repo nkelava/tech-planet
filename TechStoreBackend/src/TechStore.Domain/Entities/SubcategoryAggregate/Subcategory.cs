@@ -1,17 +1,20 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations.Schema;
 using TechStore.Domain.Entities.Base;
 
 
 namespace TechStore.Domain.Entities.SubcategoryAggregate
 {
-    [Index(nameof(Name), IsUnique = true)]
     [Index(nameof(Slug), IsUnique = true)]
     public class Subcategory : Entity
     {
         public string Name { get; set; }
         public string Slug { get; set; }
         public string? ImageURL { get; set; }
+        [NotMapped]
+        public IFormFile? Image { get; set; } = null;
+        public byte[]? ImageByte { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 

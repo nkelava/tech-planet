@@ -21,60 +21,84 @@ namespace TechStore.Application.Services
             _mapper = mapper;
         }
 
-        public async Task CreateAsync(OrderCreateModel orderModel)
+
+        public async Task CreateAsync(OrderCreateModel createModel)
         {
-            var order = _mapper.Map<Order>(orderModel);
+            if (createModel == null)
+                throw new ArgumentNullException(nameof(createModel), "Order model cannot be null.");
+
+            var order = _mapper.Map<Order>(createModel);
             order.Products.Clear();
 
-            foreach (var orderProduct in orderModel.Products)
+            foreach (var orderProduct in createModel.Products)
             {
                 var product = _repository.Product.FindById(orderProduct.Product.Id);
-                order.Products.Add(new OrderProduct{
+
+                if (product == null)
+                    throw new InvalidOperationException($"Product with ID {orderProduct.Product.Id} not found.");
+
+                if (product.UnitsInStock < orderProduct.Quantity)
+                    throw new InvalidOperationException("Insufficient stock available for the requested products.");
+
+                var newOrderProduct = new OrderProduct
+                {
                     Quantity = orderProduct.Quantity,
                     UnitPrice = product.Price,
                     TotalPrice = orderProduct.Quantity * product.Price,
                     ProductId = product.Id,
                     Product = product
-                });
+                };
+
+                order.Products.Add(newOrderProduct);
             }
 
             order.TotalPrice = order.CalculateTotalPrice();
 
             _repository.Order.Add(order);
             await _repository.SaveAsync();
+
+            foreach (var orderProduct in createModel.Products)
+            {
+                var product = _repository.Product.FindById(orderProduct.Product.Id);
+
+                product.UnitsInStock -= orderProduct.Quantity;
+                _repository.Product.Update(product);
+            }
+
+            await _repository.SaveAsync();
         }
 
-        public async Task<int> DeleteAsync(int orderId)
+        public async Task UpdateAsync(OrderUpdateModel updateModel)
         {
-            var order = await _repository.Order.GetOrderByIdAsync(orderId);
+            var order = _mapper.Map<Order>(updateModel);
+            order.UpdatedAt = DateTime.Now;
 
-            if (order is null)
-                return 0;
+            _repository.Order.Update(order);
+            await _repository.SaveAsync();
+        }
+
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var order = await _repository.Order.GetByIdAsync(id);
+
+            if (order == null)
+                return false;
 
             _repository.Order.Delete(order);
             await _repository.SaveAsync();
-            
-            return order.Id;
+
+            return true;
         }
 
-        public async Task UpdateAsync(OrderUpdateModel orderModel)
+        public async Task<int?> UpdateOrderStatusAsync(OrderUpdateStatusModel updateModel)
         {
-            var order = _mapper.Map<Order>(orderModel);
-            order.UpdatedAt = DateTime.Now;
-
-            _repository.Order.Update(order);
-            await _repository.SaveAsync();
-        }
-
-        public async Task<int> UpdateOrderStatusAsync(OrderUpdateStatusModel updateStatusModel)
-        {
-            var order = _repository.Order.FindById(updateStatusModel.OrderId);
+            var order = _repository.Order.FindById(updateModel.OrderId);
 
             if (order == null)
-                return 0;
+                return null;
 
-            var status = (OrderStatus)updateStatusModel.OrderStatusValue;
-            order.Status = status;
+            order.Status = (OrderStatus)updateModel.OrderStatusValue;
             order.UpdatedAt = DateTime.Now;
 
             _repository.Order.Update(order);
@@ -83,36 +107,73 @@ namespace TechStore.Application.Services
             return order.Id;
         }
 
-        public async Task<OrderReadModel> GetOrderByIdAsync(int orderId)
+        public async Task<int?> UpdatePaymentStatusAsync(int orderId, PaymentStatus paymentStatus)
         {
-            var order = await _repository.Order.GetOrderByIdAsync(orderId);
-            var orderModel = _mapper.Map<OrderReadModel>(order);
+            var order = _repository.Order.FindById(orderId);
 
+            if (order == null)
+                return null;
+
+            order.PaymentStatus = (PaymentStatus)paymentStatus;
+            order.UpdatedAt = DateTime.Now;
+
+            _repository.Order.Update(order);
+            await _repository.SaveAsync();
+
+            return order.Id;
+        }
+
+        public async Task<OrderReadModel?> GetByIdAsync(int id)
+        {
+            var order = await _repository.Order.GetByIdAsync(id);
+
+            if (order == null)
+                return null;
+
+            var orderModel = _mapper.Map<OrderReadModel>(order);
             return orderModel;
         }
 
-        public async Task<IEnumerable<OrderReadModel>> GetOrdersAsync()
+        public async Task<OrderReadModel?> GetBySessionIdAsync(string sessionId)
         {
-            var orders = await _repository.Order.GetAllOrdersAsync();
+            var order = await _repository.Order.GetBySessionIdAsync(sessionId);
+
+            if (order == null)
+                return null;
+
+            var orderModel = _mapper.Map<OrderReadModel>(order);
+            return orderModel;
+        }
+
+        public async Task<IEnumerable<OrderReadModel>> GetAllAsync()
+        {
+            var orders = await _repository.Order.GetAllAsync();
             var ordersModel = _mapper.Map<IList<OrderReadModel>>(orders);
 
             return ordersModel;
         }
 
-        public async Task<IEnumerable<OrderReadModel>> GetOrdersAsync(string email)
+        public async Task<IEnumerable<OrderReadModel>> GetAllAsync(string userId)
         {
-            var spec = new OrderWithProductsSpecification(email);
+            var spec = new OrderWithProductsSpecification(userId);
             var orders = await _repository.Order.Find(spec).ToListAsync();
 
-            foreach (var order in orders) {
-                foreach(var product in order.Products)
-                {
-                    product.Product = await _repository.Product.GetProductByIdAsync(product.ProductId);
+            if (orders != null)
+            {
+                foreach (var order in orders) {
+                    foreach(var product in order.Products)
+                    {
+                        var foundProduct = await _repository.Product.GetByIdAsync(product.ProductId);
+
+                        if (foundProduct != null)
+                        {
+                            product.Product = foundProduct;
+                        }
+                    }
                 }
             }
 
             var ordersModel = _mapper.Map<IList<OrderReadModel>>(orders);
-
             return ordersModel;
         }
     }

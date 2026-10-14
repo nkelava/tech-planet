@@ -3,7 +3,7 @@ import { onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { axiosPublic } from "@/api/axios";
 import ContactInfo from "@/components/common/ContactInfo.vue";
-import ContactForm from "@/components/ContactForm.vue";
+import ContactForm from "@/components/contact/ContactForm.vue";
 import EmailIcon from "@/assets/icons/contact/gmail16.png";
 import PhoneIcon from "@/assets/icons/contact/phone16.png";
 import FacebookIcon from "@/assets/icons/socials/facebook.png";
@@ -64,7 +64,7 @@ onMounted(async () => {
       </div>
     </div>
     <div class="footer-copyright">
-      <h4>&copy; 2023 TechPlanet</h4>
+      <h4>&copy; 2024 TechPlanet</h4>
     </div>
   </footer>
 </template>

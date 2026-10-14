@@ -18,50 +18,89 @@ namespace TechStore.Application.Services
             _mapper = mapper;
         }
 
-        public async Task CreateAsync(CategoryCreateModel categoryModel)
+
+        public async Task<CategoryReadModel?> CreateAsync(CategoryCreateModel createModel)
         {
-            var category = _mapper.Map<Category>(categoryModel);
+            var existingCategory = await _repository.Category.GetBySlugAsync(createModel.Slug);
+
+            if (existingCategory != null)
+                return null;
+
+            var category = _mapper.Map<Category>(createModel);
 
             _repository.Category.Add(category);
             await _repository.SaveAsync();
-        }
 
-        public async Task UpdateAsync(CategoryUpdateModel categoryModel)
-        {
-            var category = _mapper.Map<Category>(categoryModel);
-            _repository.Category.Update(category);
-
-            await _repository.SaveAsync();
-        }
-
-        public async Task DeleteAsync(int categoryId)
-        {
-            var category = await _repository.Category.GetCategoryByIdAsync(categoryId);
-
-            _repository.Category.Delete(category);
-            await _repository.SaveAsync();
-        }
-
-        public async Task<CategoryReadModel> GetCategoryBySlugAsync(string categorySlug)
-        {
-            var category = await _repository.Category.GetCategoryBySlugAsync(categorySlug);
             var categoryModel = _mapper.Map<CategoryReadModel>(category);
-
             return categoryModel;
         }
 
-        public async Task<CategoryWithSubcategoriesModel> GetCategoryWithSubcategoriesAsync(string categorySlug)
+        public async Task<CategoryReadModel?> UpdateAsync(int id, CategoryUpdateModel updateModel)
         {
-            var category = await _repository.Category.GetCategoryBySlugAsync(categorySlug);
-            var categoryWithSubcategories = await _repository.Category.GetCategoryWithSubcategoriesAsync(category.Id);
+            var existingCategory = await _repository.Category.GetByIdAsync(id);
+
+            if (existingCategory == null)
+                return null;
+
+            _mapper.Map(updateModel, existingCategory);
+            _repository.Category.Update(existingCategory);
+            await _repository.SaveAsync();
+
+            var categoryModel = _mapper.Map<CategoryReadModel>(existingCategory);
+            return categoryModel;
+        }
+
+        public async Task<int?> DeleteAsync(int id)
+        {
+            var category = await _repository.Category.GetByIdAsync(id);
+
+            if (category == null)
+                return null;
+
+            _repository.Category.Delete(category);
+            await _repository.SaveAsync();
+
+            return category.Id;
+        }
+
+        public async Task<CategoryReadModel?> GetByIdAsync(int id)
+        {
+            var category = await _repository.Category.GetByIdAsync(id);
+
+            if (category == null)
+                return null;
+            
+            var categoryModel = _mapper.Map<CategoryReadModel>(category);
+            return categoryModel;
+        }
+
+        public async Task<CategoryReadModel?> GetBySlugAsync(string slug)
+        {
+            var category = await _repository.Category.GetBySlugAsync(slug);
+
+            if (category == null)
+                return null;
+
+            var categoryModel = _mapper.Map<CategoryReadModel>(category);
+            return categoryModel;
+        }
+
+        public async Task<CategoryWithSubcategoriesModel?> GetWithSubcategoriesAsync(string slug)
+        {
+            var category = await _repository.Category.GetBySlugAsync(slug);
+
+            if (category == null)
+                return null;
+
+            var categoryWithSubcategories = await _repository.Category.GetWithSubcategoriesAsync(category.Id);
             var categoryModel = _mapper.Map<CategoryWithSubcategoriesModel>(categoryWithSubcategories);
 
             return categoryModel;
         }
 
-        public async Task<IEnumerable<CategoryReadModel>> GetAllCategoriesAsync()
+        public async Task<IEnumerable<CategoryReadModel>> GetAllAsync()
         {
-            var categories = await _repository.Category.GetAllCategoriesAsync();
+            var categories = await _repository.Category.GetAllAsync();
             var categoriesModel = _mapper.Map<IList<CategoryReadModel>>(categories);
 
             return categoriesModel;

@@ -1,18 +1,34 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { axiosPublic } from "@/api/axios";
 import ImageSlider from "@/components/ImageSlider.vue";
-import ProductList from "@/components/ProductList.vue";
-import { getProductsByTitle } from "@/database/services/productService";
+import ProductList from "@/components/product/ProductList.vue";
 
 const route = useRoute();
-const products = ref(getProductsByTitle(route.query.q));
+const products = ref([]);
 const sortType = ref("");
+
+onMounted(async () => {
+  products.value = await axiosPublic
+    .get(`/products/search/${route.query.q}`)
+    .then((response) => response.data)
+    .catch((error) => {
+      console.log(error);
+      return null;
+    });
+});
 
 watch(
   () => route.query.q,
-  (newQueryTerm) => {
-    products.value = getProductsByTitle(newQueryTerm);
+  async (newQueryTerm) => {
+    products.value = await axiosPublic
+      .get(`/products/search/${newQueryTerm}`)
+      .then((response) => response.data)
+      .catch((error) => {
+        console.log(error);
+        return null;
+      });
   }
 );
 
@@ -56,6 +72,9 @@ const sortedProducts = computed(() => {
       </div>
       <hr />
       <product-list :products="sortedProducts" />
+      <div v-if="products && products.length === 0">
+        No products found matching your search criteria.
+      </div>
     </div>
   </div>
 </template>

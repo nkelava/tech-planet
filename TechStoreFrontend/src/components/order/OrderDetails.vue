@@ -22,6 +22,10 @@ const { order } = toRefs(props);
         <h4>Total Price</h4>
         <p>${{ order?.totalPrice }}</p>
       </v-col>
+      <v-col>
+        <h4>Status</h4>
+        <p>{{ getOrderStatus(order?.status) }}</p>
+      </v-col>
     </v-row>
     <v-row>
       <v-table class="order__table transparent">
@@ -31,7 +35,6 @@ const { order } = toRefs(props);
             <th class="text-left">Price</th>
             <th class="text-left">Quantity</th>
             <th class="text-left">Total</th>
-            <th class="text-left">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -40,10 +43,23 @@ const { order } = toRefs(props);
             <td>${{ orderProduct?.product?.price }}</td>
             <td>{{ orderProduct?.quantity }}</td>
             <td>${{ orderProduct?.totalPrice }}</td>
-            <td>{{ getOrderStatus(order?.status) }}</td>
           </tr>
         </tbody>
       </v-table>
+    </v-row>
+    <v-row v-if="order?.deliveryAddress">
+      <v-expansion-panels class="expansion">
+        <v-expansion-panel class="expansion__panel" title="Delivery Address">
+          <v-expansion-panel-text class="expansion__content">
+            <p><strong>First Name:</strong> {{ order?.deliveryAddress?.firstName }}</p>
+            <p><strong>Last Name:</strong> {{ order?.deliveryAddress?.lastName }}</p>
+            <p><strong>Contact Number:</strong> {{ order?.deliveryAddress?.contactNumber }}</p>
+            <p><strong>Country:</strong> {{ order?.deliveryAddress?.country }}</p>
+            <p><strong>Shipping Address:</strong> {{ order?.deliveryAddress?.shippingAddress }}</p>
+            <p><strong>Zip Code:</strong> {{ order?.deliveryAddress?.zipCode }}</p>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
     </v-row>
   </v-container>
 </template>
@@ -66,6 +82,14 @@ const { order } = toRefs(props);
 .order__table {
   width: 100%;
   font-size: 14px;
+}
+
+.expansion__panel {
+  background-color: var(--ts-c-primary-mute) !important;
+}
+
+.expansion__content {
+  padding: 1rem 0;
 }
 
 :deep(table) {

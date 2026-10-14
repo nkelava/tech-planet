@@ -1,46 +1,59 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useToast } from "vue-toastification";
 import { axiosPrivate } from "@/api/axios";
 import { formatDate } from "@/helpers/formatDate.js";
 import { getOrderStatus } from "@/helpers/orderStatus.js";
 import { OrderStatus } from "@/constants/enums/order";
-import { ITEM_DELETE_FAIL, ITEM_DELETE_SUCCESS } from "../../../constants/messages/delete";
-import { ITEM_UPDATE_FAIL, ITEM_UPDATE_SUCCESS } from "../../../constants/messages/update";
+import { ITEM_DELETE_FAIL, ITEM_DELETE_SUCCESS } from "@/constants/messages/delete";
+import { ITEM_UPDATE_FAIL, ITEM_UPDATE_SUCCESS } from "@/constants/messages/update";
+import ConfirmationDialog from "@/components/common/ConfirmationDialog.vue";
 
 const orders = ref([]);
 const toast = useToast();
+const selectedItemId = ref(null);
+const showDialog = ref(false);
+const searchQuery = ref("");
+const pageState = ref({
+  currentPage: 1,
+  itemsPerPage: 10,
+});
 
 onMounted(() => reloadOrders());
 
 async function reloadOrders() {
   const resp = await axiosPrivate.get("/orders/all").catch((error) => console.log(error));
 
-  if (resp.status !== 200) return;
+  if (resp?.status !== 200) return;
 
   orders.value = resp.data;
 }
 
-async function deleteOrder(orderId) {
+const openConfirmationDialog = (id) => {
+  selectedItemId.value = id;
+  showDialog.value = true;
+};
+
+const deleteOrder = async (orderId) => {
   await axiosPrivate
     .delete(`/orders/${orderId}`)
     .then((resp) => {
-      if (resp.status === 200) {
+      if (resp?.status === 200) {
         toast.success(ITEM_DELETE_SUCCESS);
       }
     })
     .catch(() => toast.error(ITEM_DELETE_FAIL));
   await reloadOrders();
-}
+};
 
-async function updateOrderStatus(orderId, orderStatusValue) {
+const updateOrderStatus = async (orderId, orderStatusValue) => {
   await axiosPrivate
     .put("/orders/status", {
       orderId,
       orderStatusValue,
     })
     .then((resp) => {
-      if (resp.status === 200) {
+      if (resp?.status === 200) {
         toast.success(ITEM_UPDATE_SUCCESS);
       }
     })
@@ -49,14 +62,52 @@ async function updateOrderStatus(orderId, orderStatusValue) {
       console.log(error);
     });
   await reloadOrders();
-}
+};
 
-// TODO: Add pagination (10 items per page)
+const filteredOrders = computed(() => {
+  return orders.value.filter(
+    (order) =>
+      order?.email.toLowerCase().includes(searchQuery.value.trim().toLowerCase()) ||
+      order?.id?.toString().includes(searchQuery.value.trim())
+  );
+});
+
+watch(
+  () => orders.value,
+  () => {
+    const totalItems = filteredOrders.value.length;
+    const maxPage = Math.ceil(totalItems / pageState.value.itemsPerPage);
+
+    if (pageState.value.currentPage > maxPage) {
+      pageState.value.currentPage = maxPage || 1;
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+const totalPageCount = computed(() =>
+  Math.ceil(filteredOrders.value.length / pageState.value.itemsPerPage)
+);
+
+const currentPageItems = computed(() => {
+  return filteredOrders.value.slice(
+    (pageState.value.currentPage - 1) * pageState.value.itemsPerPage,
+    pageState.value.currentPage * pageState.value.itemsPerPage
+  );
+});
 </script>
 <template>
   <v-container class="dashboard__container">
-    <v-row>
+    <v-row class="header-search">
       <h2>Order List</h2>
+      <v-text-field
+        v-model="searchQuery"
+        class="header-search__input"
+        label="Search..."
+        hide-details="true"
+        density="compact"
+        variant="outlined"
+      />
     </v-row>
     <v-row>
       <v-table class="dashboard__table">
@@ -70,7 +121,7 @@ async function updateOrderStatus(orderId, orderStatusValue) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(order, id) in orders" :key="id">
+          <tr v-for="(order, id) in currentPageItems" :key="id">
             <td>{{ order?.id }}</td>
             <td :title="order?.email">{{ order?.email }}</td>
             <td>{{ formatDate(order?.createdAt) }}</td>
@@ -82,15 +133,23 @@ async function updateOrderStatus(orderId, orderStatusValue) {
                 size="30"
                 title="Delete"
                 alt="Delete"
-                @click="deleteOrder(order?.id)"
+                @click="openConfirmationDialog(order?.id)"
               />
               <v-btn
                 color="yellow"
                 icon="mdi-progress-clock"
                 size="30"
-                title="Set to In Progress"
-                alt="In Progress"
+                title="Set to Pending"
+                alt="Pending"
                 @click="updateOrderStatus(order?.id, OrderStatus.PENDING)"
+              />
+              <v-btn
+                color="yellow"
+                icon="mdi-truck"
+                size="30"
+                title="Set to Packing"
+                alt="Packing"
+                @click="updateOrderStatus(order?.id, OrderStatus.PACKING)"
               />
               <v-btn
                 color="orange"
@@ -102,20 +161,62 @@ async function updateOrderStatus(orderId, orderStatusValue) {
               />
               <v-btn
                 color="green"
-                icon="mdi-check"
+                icon="mdi-truck"
                 size="30"
-                title="Set to Completed"
-                alt="Completed"
-                @click="updateOrderStatus(order?.id, OrderStatus.COMPLETED)"
+                title="Set to Delivered"
+                alt="Delivered"
+                @click="updateOrderStatus(order?.id, OrderStatus.DELIVERED)"
+              />
+              <v-btn
+                color="red"
+                icon="mdi-truck"
+                size="30"
+                title="Set to Returned"
+                alt="Returned"
+                @click="updateOrderStatus(order?.id, OrderStatus.RETURNED)"
+              />
+              <v-btn
+                color="red"
+                icon="mdi-cancel"
+                size="30"
+                title="Set to Cancelled"
+                alt="Cancelled"
+                @click="updateOrderStatus(order?.id, OrderStatus.CANCELLED)"
+              />
+              <v-btn
+                color="red"
+                icon="mdi-cash"
+                size="30"
+                title="Set to Refunded"
+                alt="Refunded"
+                @click="updateOrderStatus(order?.id, OrderStatus.REFUNDED)"
               />
             </td>
           </tr>
           <tr v-if="orders.length < 1">
-            <td>There are no records.</td>
+            <td>Nothing to see here yet</td>
           </tr>
         </tbody>
       </v-table>
+      <v-container v-if="orders.length > pageState.itemsPerPage">
+        <v-row justify="center">
+          <v-col cols="10">
+            <v-container class="max-width">
+              <v-pagination v-model="pageState.currentPage" class="my-4" :length="totalPageCount" />
+            </v-container>
+          </v-col>
+        </v-row>
+      </v-container>
     </v-row>
+    <confirmation-dialog
+      title="Confirm Deletion"
+      content="Are you sure you want to delete this item?"
+      confirmText="Delete"
+      :showDialog="showDialog"
+      :itemId="selectedItemId"
+      @update:showDialog="showDialog = $event"
+      @confirm="deleteOrder"
+    />
   </v-container>
 </template>
 
@@ -150,6 +251,6 @@ td {
 .table__actions {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 </style>

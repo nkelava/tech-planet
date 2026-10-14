@@ -2,14 +2,15 @@
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { axiosPublic } from "@/api/axios";
-import ProductGallery from "@/components/ProductGallery.vue";
-import ProductDetails from "@/components/ProductDetails.vue";
-import TabsWrapper from "@/components/TabsWrapper.vue";
+import ProductGallery from "@/components/product/ProductGallery.vue";
+import ProductDetails from "@/components/product/ProductDetails.vue";
+import TabsWrapper from "@/components/product/TabsWrapper.vue";
 
 const route = useRoute();
 const categorySlug = ref(route.params.category);
 const subcategorySlug = ref(route.params.subcategory);
 const productSlug = ref(route.params.productSlug);
+const subcategoryDetails = ref({});
 const product = ref({});
 const breadcrumbsItems = [
   {
@@ -23,12 +24,12 @@ const breadcrumbsItems = [
     href: `/${categorySlug.value}`,
   },
   {
-    title: `${subcategorySlug.value}`,
+    title: subcategoryDetails.value.name || subcategorySlug.value,
     disabled: false,
-    href: `/${categorySlug.value}/${subcategorySlug.value}`,
+    href: `/${categorySlug.value}/${subcategorySlug?.value}`,
   },
   {
-    title: `${productSlug.value}`,
+    title: product.value.name || productSlug.value,
     disabled: true,
     href: `/${categorySlug.value}/${subcategorySlug.value}/${productSlug.value}`,
   },
@@ -37,15 +38,23 @@ const breadcrumbsItems = [
 const getProduct = async () => {
   await axiosPublic
     .get(`/products/${productSlug.value}`)
-    .then((response) => (product.value = response.data));
+    .then((response) => (product.value = response.data))
+    .catch((error) => console.log(error));
 };
 
-const updateProduct = () => {
-  getProduct();
+const updateProduct = async () => {
+  await getProduct();
 };
 
-onMounted(() => {
-  getProduct();
+onMounted(async () => {
+  await axiosPublic
+    .get(`/subcategories/${subcategorySlug.value}`)
+    .then((response) => (subcategoryDetails.value = response.data))
+    .catch((error) => {
+      console.error(`Failed to fetch subcategory details for ${subcategorySlug.value}:`, error);
+    });
+
+  await getProduct();
 });
 </script>
 
@@ -57,7 +66,7 @@ onMounted(() => {
       </template>
     </v-breadcrumbs>
     <div class="product-container ts-container">
-      <product-gallery class="gallery" />
+      <product-gallery class="gallery" :product="product" />
       <product-details class="info" :product="product" />
       <tabs-wrapper class="tabs" :product="product" :update="updateProduct" />
     </div>
